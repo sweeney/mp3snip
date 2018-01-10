@@ -2,7 +2,8 @@ package main
 
 import (
 	"fmt"
-	"github.com/dmulholland/mp3lib"
+	"github.com/sweeney/mp3lib"
+	"io"
 	"os"
 	"time"
 )
@@ -42,11 +43,19 @@ func main() {
 
 	for {
 
-		// Read the next frame until there aren't any
-		frame := mp3lib.NextFrame(in)
-		if frame == nil {
+		// Read the next frame
+		// If we're EOF, break out
+		frame, frameErr := mp3lib.NextFrame(in)
+		if frameErr == io.EOF {
 			break
 		}
+		framesEncountered = framesEncountered + 1
+
+		// If we not a proper frame, continue
+		if frame == nil {
+			continue
+		}
+
 		framesEncountered = framesEncountered + 1
 
 		// Skip VBR headers
