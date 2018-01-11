@@ -17,6 +17,8 @@ func main() {
 	var framesEncountered, framesDropped, framesIncluded, outputBytes int
 	var frameDuration, cumulativeDuration, outputDuration time.Duration
 
+	start := time.Now()
+
 	// Setup files
 	out, err := os.Create(outpath)
 	if err != nil {
@@ -38,21 +40,18 @@ func main() {
 	}
 
 	line()
-	fmt.Printf("Trim %0.1fs from %s\n", startAfter.Seconds(), inpath)
+	fmt.Printf("Going to trim %0.1fs from %s\n", startAfter.Seconds(), inpath)
 	fmt.Println("Starting...")
 
 	for {
 
 		// Read the next frame
-		// If we're EOF, break out
+		// EOF kills the loop, nil frame continues to the next
 		frame, frameErr := mp3lib.NextFrame(in)
-		if frameErr == io.EOF {
-			break
-		}
-		framesEncountered = framesEncountered + 1
-
-		// If we not a proper frame, continue
 		if frame == nil {
+			if frameErr == io.EOF {
+				break
+			}
 			continue
 		}
 
@@ -87,9 +86,11 @@ func main() {
 
 	}
 
-	fmt.Println("Finished.")
-	line()
-	fmt.Printf("Skipped %d frames\nNew file %f seconds long\n", framesDropped, outputDuration.Seconds())
+	t := time.Now()
+	elapsed := t.Sub(start)
+
+	fmt.Printf("Finished - took %s\n", elapsed.String())
+	fmt.Printf("Skipped %d frames\nNew file %f seconds long vs %f seconds original\n", framesDropped, outputDuration.Seconds(), cumulativeDuration.Seconds())
 	line()
 }
 
