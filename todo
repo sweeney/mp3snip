@@ -1,6 +1,4 @@
 todo
 
-- flags for times
-- better error handling; stderr throughout
 - support mp3 via stdin
 - maybe generic pairs of timestamps to cutout "0s-25s, 600s-610s, end-25s"
