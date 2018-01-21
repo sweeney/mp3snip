@@ -47,10 +47,10 @@ func main() {
 
 func grabAndValidateArgs() (time.Duration, time.Duration, string, string, error) {
 
-	start := flag.String("start", "30s", "Start after; Duration, parsable by go https://golang.org/pkg/time/#ParseDuration - eg 25s")
-	end := flag.String("end", "9s", "End before; Duration, parsable by go https://golang.org/pkg/time/#ParseDuration - eg 10s")
-	inputFile := flag.String("in", "in.mp3", "Path to input mp3 file")
-	outputFile := flag.String("out", "out.mp3", "Path to output mp3 file")
+	start := flag.String("start", "", "Start after; Duration, parsable by go https://golang.org/pkg/time/#ParseDuration - eg 25s")
+	end := flag.String("end", "", "End before; Duration, parsable by go https://golang.org/pkg/time/#ParseDuration - eg 10s. Optional")
+	inputFile := flag.String("in", "", "Path to input mp3 file")
+	outputFile := flag.String("out", "", "Path to output mp3 file")
 
 	flag.Parse()
 
