@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/binary"
+	"errors"
+	"flag"
 	"fmt"
 	"github.com/sweeney/mp3lib"
 	"io"
@@ -11,19 +13,8 @@ import (
 
 func main() {
 
-	inPath := "in.mp3"
-	outPath := "out.mp3"
-	after := "25s"
-	before := "9s"
+	startAfter, endAt, inPath, outPath, err := grabAndValidateArgs()
 
-	// Parse for duration
-	startAfter, err := time.ParseDuration(after)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-
-	endAt, err := time.ParseDuration(before)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -54,8 +45,42 @@ func main() {
 
 }
 
-func help() string {
-	return "Help!"
+func grabAndValidateArgs() (time.Duration, time.Duration, string, string, error) {
+
+	start := flag.String("start", "30s", "Start after; Duration, parsable by go https://golang.org/pkg/time/#ParseDuration - eg 25s")
+	end := flag.String("end", "9s", "End before; Duration, parsable by go https://golang.org/pkg/time/#ParseDuration - eg 10s")
+	inputFile := flag.String("in", "in.mp3", "Path to input mp3 file")
+	outputFile := flag.String("out", "out.mp3", "Path to output mp3 file")
+
+	flag.Parse()
+
+	if *start == "" {
+		return 0, 0, "", "", errors.New("Missing start time flag")
+	}
+
+	startAfter, err := time.ParseDuration(*start)
+	if err != nil {
+		return 0, 0, "", "", err
+	}
+
+	var endAt time.Duration
+	if *end != "" {
+		endAt, err = time.ParseDuration(*end)
+		if err != nil {
+			return 0, 0, "", "", err
+		}
+	}
+
+	if *inputFile == "" {
+		return 0, 0, "", "", errors.New("Missing input file path")
+	}
+
+	if *outputFile == "" {
+		return 0, 0, "", "", errors.New("Missing output file path")
+	}
+
+	return startAfter, endAt, *inputFile, *outputFile, nil
+
 }
 
 func snip(startAfter time.Duration, endAt time.Duration, inPath string, outPath string) (map[string]int64, error) {
