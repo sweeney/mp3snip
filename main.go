@@ -86,9 +86,6 @@ func grabAndValidateArgs() (time.Duration, time.Duration, string, string, error)
 func snip(startAfter time.Duration, endAt time.Duration, inPath string, outPath string) (map[string]int64, error) {
 
 	meta := make(map[string]int64)
-
-	//	var framesEncountered, framesDropped, framesIncluded, predictedFrames int64
-	//	var inputBytes, effectiveBytes, outputBytes int64
 	var frameDuration, cumulativeDuration, outputDuration time.Duration
 
 	// Setup files
