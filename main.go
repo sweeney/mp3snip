@@ -11,15 +11,10 @@ import (
 
 func main() {
 
-	inpath := "in.mp3"
-	outpath := "out.mp3"
-
+	inPath := "in.mp3"
+	outPath := "out.mp3"
 	after := "25s"
 	before := "9s"
-
-	var framesEncountered, framesDropped, framesIncluded, predictedFrames int64
-	var inputBytes, effectiveBytes, outputBytes int64
-	var frameDuration, cumulativeDuration, outputDuration time.Duration
 
 	// Parse for duration
 	startAfter, err := time.ParseDuration(after)
@@ -28,44 +23,69 @@ func main() {
 		os.Exit(1)
 	}
 
-	finishBefore, err := time.ParseDuration(before)
+	endAt, err := time.ParseDuration(before)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
 	line()
-	fmt.Printf("Snip %0.1fs Leading from %s\n", startAfter.Seconds(), inpath)
-	if finishBefore > 0 {
-		fmt.Printf("Snip %0.1fs Trailing from %s\n", finishBefore.Seconds(), inpath)
+	fmt.Printf("Snip %0.1fs Leading from %s\n", startAfter.Seconds(), inPath)
+	if endAt > 0 {
+		fmt.Printf("Snip %0.1fs Trailing from %s\n", endAt.Seconds(), inPath)
 	}
 	fmt.Println("Starting...")
 
 	start := time.Now()
 
-	// Setup files
-	in, err := os.Open(inpath)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	meta, result := snip(startAfter, endAt, inPath, outPath)
+	if result != nil {
+		fmt.Fprintln(os.Stderr, result)
 		os.Exit(1)
+	}
+
+	t := time.Now()
+	elapsed := t.Sub(start)
+
+	fmt.Printf("Finished - took %s, saw %v frames vs %v predicted\n", elapsed.String(), meta["framesEncountered"], meta["predictedFrames"])
+	fmt.Printf("Skipped %d frames\n", meta["framesDropped"])
+	fmt.Printf("New file %ds long vs %ds original\n", meta["outputDuration"], meta["cumulativeDuration"])
+	line()
+
+}
+
+func help() string {
+	return "Help!"
+}
+
+func snip(startAfter time.Duration, endAt time.Duration, inPath string, outPath string) (map[string]int64, error) {
+
+	meta := make(map[string]int64)
+
+	//	var framesEncountered, framesDropped, framesIncluded, predictedFrames int64
+	//	var inputBytes, effectiveBytes, outputBytes int64
+	var frameDuration, cumulativeDuration, outputDuration time.Duration
+
+	// Setup files
+	in, err := os.Open(inPath)
+	if err != nil {
+		return meta, err
 	}
 	defer in.Close()
 
 	info, err := in.Stat()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		return meta, err
 	}
 
-	out, err := os.Create(outpath)
+	out, err := os.Create(outPath)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		return meta, err
 	}
 	defer out.Close()
 
-	inputBytes = info.Size()
-	effectiveBytes = inputBytes
+	meta["inputBytes"] = info.Size()
+	meta["effectiveBytes"] = meta["inputBytes"]
 
 	for {
 
@@ -76,13 +96,12 @@ func main() {
 			// ID3 tag encountered
 			if ID3 != nil {
 				// Deduct the ID3 bytes from the total input file size to get the number of bytes available to host frames
-				effectiveBytes = effectiveBytes - int64(binary.Size(ID3.RawBytes))
+				meta["effectiveBytes"] = meta["effectiveBytes"] - int64(binary.Size(ID3.RawBytes))
 
 				// Write the ID3 tag to the output file
 				_, err := out.Write(ID3.RawBytes)
 				if err != nil {
-					fmt.Fprintln(os.Stderr, err)
-					os.Exit(1)
+					return meta, err
 				}
 
 				continue
@@ -98,18 +117,18 @@ func main() {
 		}
 
 		// Skip VBR headers
-		if framesEncountered == 1 {
+		if meta["framesEncountered"] == 1 {
 			if mp3lib.IsXingHeader(frame) || mp3lib.IsVbriHeader(frame) {
 				continue
 			}
 		}
 
 		// We've got a frame, count it
-		framesEncountered = framesEncountered + 1
+		meta["framesEncountered"] = meta["framesEncountered"] + 1
 
 		// Take this first frame proper, use to predict how many frames there are in the whole file
-		if predictedFrames == 0 {
-			predictedFrames = effectiveBytes / int64(binary.Size(frame.RawBytes))
+		if meta["predictedFrames"] == 0 {
+			meta["predictedFrames"] = meta["effectiveBytes"] / int64(binary.Size(frame.RawBytes))
 		}
 
 		// Caculate how long the frame lasts using the sampling rate and the number of samples in the frame
@@ -119,44 +138,41 @@ func main() {
 
 		// Drop frames if they come before the start point
 		if cumulativeDuration < startAfter {
-			framesDropped = framesDropped + 1
+			meta["framesDropped"] = meta["framesDropped"] + 1
 			continue
 		}
 
 		// If we have a finish point
-		if finishBefore > 0 && predictedFrames > 0 {
+		if endAt > 0 && meta["predictedFrames"] > 0 {
 			// Calculate the last frame number we should consider
-			stopPoint := predictedFrames - int64(finishBefore/frameDuration)
+			stopPoint := meta["predictedFrames"] - int64(endAt/frameDuration)
 
 			// Drop any frames thereafter
-			if framesEncountered > stopPoint {
-				framesDropped = framesDropped + 1
+			if meta["framesEncountered"] > stopPoint {
+				meta["framesDropped"] = meta["framesDropped"] + 1
 				continue
 			}
 		}
 
 		// If we've got this far, we're in between start and end points so
 		// Keep track of the frame stats
-		framesIncluded = framesIncluded + 1
-		outputBytes = outputBytes + int64(frame.FrameLength)
+		meta["framesIncluded"] = meta["framesIncluded"] + 1
+		meta["outputBytes"] = meta["outputBytes"] + int64(frame.FrameLength)
 		outputDuration = outputDuration + frameDuration
 
 		// And write the frame to the out file
 		_, err := out.Write(frame.RawBytes)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			return meta, err
 		}
 
 	}
 
-	t := time.Now()
-	elapsed := t.Sub(start)
+	meta["outputDuration"] = int64(outputDuration.Seconds())
+	meta["cumulativeDuration"] = int64(cumulativeDuration.Seconds())
 
-	fmt.Printf("Finished - took %s, saw %v frames vs %v predicted\n", elapsed.String(), framesEncountered, predictedFrames)
-	fmt.Printf("Skipped %d frames\n", framesDropped)
-	fmt.Printf("New file %0.2fs long vs %0.2fs original\n", outputDuration.Seconds(), cumulativeDuration.Seconds())
-	line()
+	return meta, nil
+
 }
 
 func line() {
